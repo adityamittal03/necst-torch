@@ -4,8 +4,8 @@ Final project for CS274E @ UCI. We reimplement the NECST generative model with G
 
 ## References
 
-- Original paper: _NECST: Neural Error-Correcting and Source-Tracing Codes_ (ICML 2018) — Valerio M. Sitzmann et al.
-- Reference implementation (TensorFlow): https://github.com/vsitzmann/NECST
+- Original paper: 
+- Reference implementation (TensorFlow): 
 
 ## Getting started
 
