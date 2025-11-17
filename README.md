@@ -1,6 +1,6 @@
-# cs274e-project
+# necst-torch implementation 
 
-Final project for CS274E. We reimplement the NECST generative model with Gumbel-Softmax and VIMCO estimators for discrete latent variables.
+Final project for CS274E @ UCI. We reimplement the NECST generative model with Gumbel-Softmax and VIMCO estimators for discrete latent variables.
 
 ## References
 
