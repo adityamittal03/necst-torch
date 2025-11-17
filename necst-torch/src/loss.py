@@ -121,5 +121,5 @@ class Loss:
 
     def __call__(self, model, *args, **kwargs):
         if self.use_relaxation:
-            return self.gumbel_loss(*args, **kwargs)
+            return self._gumbel_softmax_loss(*args, **kwargs)
         return self.vimco_loss(model, *args, **kwargs)
