@@ -1,7 +1,6 @@
 Python 3.12.12
 torch
-
 numpy
 scipy
 matplotlib
-torch
+tqdm

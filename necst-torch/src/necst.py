@@ -1,9 +1,7 @@
-import os
 import torch
 import torch.nn as nn
 import torch.nn.functional as F
 from torch.distributions import Bernoulli
-from torch.distributions.relaxed_bernoulli import RelaxedBernoulli
 
 class NecstTorch(nn.Module):
     """
