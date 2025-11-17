@@ -4,13 +4,12 @@ import torch.nn as nn
 import torch.nn.functional as F
 from torch.distributions import Bernoulli
 from torch.distributions.relaxed_bernoulli import RelaxedBernoulli
-from .loss import VIMCOLoss
 
-class NECSTBinary(nn.Module):
+class NecstTorch(nn.Module):
     """
     NECST Implementation for binary datasets (BinaryMNIST, Omniglot, Random Bits).
     """
-    def __init__(self, input_dim=784, z_dim=100, hidden_dim=500, vimco_samples=5, reg_param=1e-4, noise=0.0, test_noise=0.0, discrete_relax=True, lr=1e-3,):
+    def __init__(self, input_dim=784, z_dim=100, hidden_dim=500, vimco_samples=5, reg_param=1e-4, noise=0.0, test_noise=0.0,):
         super().__init__()
 
         # network params
@@ -21,8 +20,6 @@ class NECSTBinary(nn.Module):
         self.reg_param = reg_param
         self.noise = noise
         self.test_noise = test_noise
-        self.discrete_relax = discrete_relax
-        self.vimco_loss_fn = VIMCOLoss(reg_param=reg_param)
         
         # encoder neural network - one hidden layer MLP (500 units)
         self.encoder_net = nn.Sequential(
@@ -39,13 +36,8 @@ class NECSTBinary(nn.Module):
             nn.LeakyReLU(0.1, inplace=True),
         )
         self.dec_out = nn.Linear(hidden_dim, input_dim)
-    
-    ### useful functions --- <VIMCO loss> -----
-    def vimco_loss(self, x, x_reconstr_logits, log_q_h):
-        return self.vimco_loss_fn(self, x, x_reconstr_logits, log_q_h)
 
     ### useful functions --- <encoder + decoder> -----
-    
     # call encoder
     def encoder(self, x):
         """
