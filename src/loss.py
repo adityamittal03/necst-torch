@@ -36,7 +36,7 @@ class Loss:
 
     def build_vimco_loss(self, l):
         """
-        Torch equivalent of TF build_vimco_loss.
+        building the Importance Weighted Autoencoder https://arxiv.org/abs/1509.00519
         Args:
             l: tensor of shape (k, batch_size)
         """
@@ -121,5 +121,5 @@ class Loss:
 
     def __call__(self, model, *args, **kwargs):
         if self.use_relaxation:
-            return self._gumbel_softmax_loss(*args, **kwargs)
+            return self._gumbel_softmax_loss(model, *args, **kwargs)
         return self.vimco_loss(model, *args, **kwargs)
