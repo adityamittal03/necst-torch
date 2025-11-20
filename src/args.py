@@ -1,9 +1,9 @@
-"""parsing cli args"""
+"""input cli args"""
 
 import argparse
 
 def parse_architecture(spec: str):
-    """Convert comma-separated layer sizes (e.g. "500,500") into a list of ints."""
+    """comma-separated encoder/decoder layers ("500,500") into a list of ints."""
     spec = (spec or "").strip()
     if not spec:
         return []
@@ -63,6 +63,11 @@ def build_parser() -> argparse.ArgumentParser:
         "--save-path", type=str, default="models/necst.pt", help="Where to save the trained model"
     )
     parser.add_argument("--checkpoint", type=str, default=None, help="Checkpoint path for evaluation or fine-tuning")
+    parser.add_argument(
+        "--plot-loss",
+        action="store_true",
+        help="Plot train/validation loss curves to plots/training_loss.png",
+    )
 
     return parser
 

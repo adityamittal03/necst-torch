@@ -11,7 +11,6 @@ if str(ROOT) not in sys.path:
 
 import numpy as np
 import torch
-import torch.nn.functional as F
 from tqdm import trange
 
 from src.args import parse_args, parse_architecture
@@ -32,13 +31,14 @@ def train_epoch_gumbel(model, loader, loss_fn, optimizer, device):
     running = 0.0
     for batch in loader:
         batch = batch.to(device)
+        batch_flat = batch.view(batch.size(0), -1)
         logits = model.encoder(batch)
         z = loss_fn.gumbel_softmax(logits)
         recon_logits = model.decoder(z)
         recon_probs = torch.sigmoid(recon_logits)
         qy = torch.softmax(logits / loss_fn.temperature, dim=-1)
 
-        loss = loss_fn(model, recon_probs, batch, qy)
+        loss = loss_fn(model, recon_probs, batch_flat, qy)
         optimizer.zero_grad()
         loss.backward()
         optimizer.step()
@@ -51,10 +51,11 @@ def train_epoch_vimco(model, loader, loss_fn, theta_opt, phi_opt, device):
     running = 0.0
     for batch in loader:
         batch = batch.to(device)
-        _, y, _, q, x_recon_logits = model(batch)
+        y, q, x_recon_logits = model(batch)
         log_q_h = q.log_prob(y).sum(dim=-1)
 
-        theta_loss, phi_loss, _ = loss_fn(model, batch, x_recon_logits, log_q_h)
+        flat = batch.view(batch.size(0), -1)
+        theta_loss, phi_loss, _ = loss_fn(model, flat, x_recon_logits, log_q_h)
 
         theta_opt.zero_grad()
         phi_opt.zero_grad()
@@ -67,15 +68,8 @@ def train_epoch_vimco(model, loader, loss_fn, theta_opt, phi_opt, device):
 
 
 def evaluate_reconstruction(model, loader, device):
-    model.eval()
-    total = 0.0
-    with torch.no_grad():
-        for batch in loader:
-            batch = batch.to(device)
-            _, _, _, _, recon_logits = model.forward_test(batch)
-            loss = F.binary_cross_entropy_with_logits(recon_logits, batch, reduction="sum")
-            total += loss.item()
-    return total / len(loader.dataset)
+    # Delegate to the model helper; per_element=False -> per-image BCE.
+    return model.evaluate_reconstruction(loader, per_element=False)
 
 
 def save_checkpoint(model, args):
@@ -86,6 +80,26 @@ def save_checkpoint(model, args):
     payload = {"model_state": model.state_dict(), "config": vars(args)}
     torch.save(payload, save_path)
     print(f"Saved checkpoint to {save_path}")
+
+
+def plot_losses(train_losses, val_losses, save_dir=Path("plots"), filename="training_loss.png"):
+    import matplotlib.pyplot as plt
+
+    save_dir.mkdir(parents=True, exist_ok=True)
+    epochs = range(1, len(train_losses) + 1)
+    plt.figure(figsize=(8, 5))
+    plt.plot(epochs, train_losses, label="train loss")
+    if val_losses:
+        plt.plot(epochs, val_losses, label="validation loss")
+    plt.xlabel("Epoch")
+    plt.ylabel("Loss")
+    plt.title("Training curves")
+    plt.legend()
+    out_path = save_dir / filename
+    plt.tight_layout()
+    plt.savefig(out_path)
+    print(f"Saved loss plot to {out_path}")
+    plt.close()
 
 
 if __name__ == "__main__":
@@ -147,19 +161,31 @@ if __name__ == "__main__":
         else:
             raise ValueError(f"Unsupported optimizer '{args.optimizer}'")
 
+    train_curve = []
+    val_curve = []
+
     for epoch in trange(1, args.epochs + 1, desc="Epochs"):
         if use_gumbel:
             train_loss = train_epoch_gumbel(model, train_loader, loss_fn, optimizer, device)
         else:
             train_loss = train_epoch_vimco(model, train_loader, loss_fn, theta_opt, phi_opt, device)
 
-        print(f"Epoch {epoch}/{args.epochs} - train loss: {train_loss:.4f}")
+        train_curve.append(train_loss)
         if valid_loader is not None:
             val_loss = evaluate_reconstruction(model, valid_loader, device)
-            print(f"    validation BCE: {val_loss:.4f}")
+            val_curve.append(val_loss)
+
+        if epoch % 10 == 0:
+            msg = f"Epoch {epoch}/{args.epochs} - train loss: {train_loss:.4f}"
+            if valid_loader is not None:
+                msg += f" | val BCE per image: {val_curve[-1]:.4f}"
+            print(msg)
 
     if test_loader is not None:
         test_loss = evaluate_reconstruction(model, test_loader, device)
-        print(f"Test BCE: {test_loss:.4f}")
+        print(f"Test BCE per image: {test_loss:.4f}")
 
     save_checkpoint(model, args)
+
+    if args.plot_loss:
+        plot_losses(train_curve, val_curve, save_dir=Path("plots"))

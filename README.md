@@ -4,8 +4,8 @@ Final project for CS274E @ UCI. We reimplement the NECST generative model with G
 
 ## References
 
-- Original paper: 
-- Reference implementation (TensorFlow): 
+- Original paper: https://arxiv.org/abs/1811.07557.
+- Reference implementation (TensorFlow): https://github.com/ermongroup/necst.
 
 ## Getting started
 
@@ -19,9 +19,9 @@ conda activate necst
 # install dependencies
 pip install -r requirements.txt
 
-# download Binary MNIST or generate random bit datasets
-python data_setup/mnist.py BinaryMNIST
-python data_setup/random_bits.py data/random_bits 100
+# download Binary MNIST (binarized torchvision MNIST) or generate random bit datasets
+python data_setup/download.py BINARYMNIST
+python data_setup/download.py random_bits --n-bits 100
 ```
 
 ## Training
