@@ -1,0 +1,13 @@
+# Data, model artifacts, and experiment outputs
+data/
+models/
+results/
+
+# Python cache artifacts
+__pycache__/
+*.py[cod]
+*.pyo
+*.pyd
+
+# Notebook checkpoints
+.ipynb_checkpoints/
