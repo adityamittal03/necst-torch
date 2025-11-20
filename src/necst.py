@@ -152,7 +152,7 @@ class NecstTorch(nn.Module):
         return total_loss / max(total_samples, 1)
 
 
-    def plot_reconstructions(self, loader, n_samples: int = 8, title: str = None):
+    def plot_reconstructions(self, loader, n_samples: int = 8, title: str = None, seed: int = None):
         """
         plots reconstructions
         """
@@ -165,7 +165,11 @@ class NecstTorch(nn.Module):
         if side * side != self.input_dim:
             raise ValueError(f"Cannot reshape input_dim={self.input_dim} into a square image.")
 
-        idx = torch.randperm(len(ds))[:n_samples]
+        if seed is not None:
+            generator = torch.Generator(device="cpu").manual_seed(seed)
+            idx = torch.randperm(len(ds), generator=generator)[:n_samples]
+        else:
+            idx = torch.randperm(len(ds))[:n_samples]
         batch = []
         for i in idx:
             sample = ds[i]

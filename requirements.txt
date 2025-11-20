@@ -4,3 +4,5 @@ matplotlib
 tqdm
 torch
 torchvision
+scikit-learn
+xgboost

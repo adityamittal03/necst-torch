@@ -8,9 +8,9 @@ from torch.utils.data import DataLoader
 from data_setup.dataloader import RandomBitsDataset, load_binarized_mnist, load_binarized_omniglot
 
 
-def _load_binary_mnist(root: Path):
+def _load_binary_mnist(root: Path, return_labels: bool = False):
     # Uses torchvision MNIST with deterministic 0/1 binarization.
-    return load_binarized_mnist(root, download=True, return_labels=False)
+    return load_binarized_mnist(root, download=True, return_labels=return_labels)
 
 
 def _load_random_bits(root: Path):
@@ -25,15 +25,17 @@ def _infer_input_dim(example) -> int:
     return sample.numel()
 
 
-def get_dataset_splits(dataset_name: str, datadir: str) -> Tuple[tuple, int]:
+def get_dataset_splits(dataset_name: str, datadir: str, return_labels: bool = False) -> Tuple[tuple, int]:
     dataset = dataset_name.lower()
     root = Path(datadir)
     if dataset in {"binarymnist", "mnist", "binary-mnist"}:
-        splits = _load_binary_mnist(root / "BinaryMNIST")
+        splits = _load_binary_mnist(root / "BinaryMNIST", return_labels=return_labels)
     elif dataset in {"random_bits", "random", "random-bits"}:
         splits = _load_random_bits(root / "random_bits")
     elif dataset in {"omnigplot", "omniglot"}:
-        splits = load_binarized_omniglot(root / "Omniglot", download=True, return_labels=False)
+        splits = load_binarized_omniglot(
+            root / "Omniglot", download=True, return_labels=return_labels
+        )
     else:
         raise ValueError(f"Unsupported dataset '{dataset_name}'")
     input_dim = _infer_input_dim(splits[0][0])
@@ -47,8 +49,11 @@ def build_dataloaders(
     need_train: bool = True,
     need_valid: bool = True,
     need_test: bool = True,
+    return_labels: bool = False,
 ):
-    (train_ds, valid_ds, test_ds), input_dim = get_dataset_splits(dataset_name, datadir)
+    (train_ds, valid_ds, test_ds), input_dim = get_dataset_splits(
+        dataset_name, datadir, return_labels=return_labels
+    )
 
     train_loader = (
         DataLoader(train_ds, batch_size=batch_size, shuffle=True) if need_train else None
