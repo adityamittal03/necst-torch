@@ -1,4 +1,4 @@
-"""input cli args"""
+"""input cli args for train.py"""
 
 import argparse
 
@@ -10,7 +10,7 @@ def parse_architecture(spec: str):
     return [int(part.strip()) for part in spec.split(",") if part.strip()]
 
 def build_parser() -> argparse.ArgumentParser:
-    parser = argparse.ArgumentParser(description="Train or test NECST Torch models")
+    parser = argparse.ArgumentParser(description="Training NECST-Torch")
 
     # data + environment
     parser.add_argument("--datadir", type=str, default="./data", help="Root directory containing datasets")
@@ -18,7 +18,7 @@ def build_parser() -> argparse.ArgumentParser:
         "--dataset",
         type=str.lower,
         default="binarymnist",
-        help="Dataset to use (binarymnist or random_bits)",
+        help="Dataset to use (binarymnist, random_bits, omniglot)",
     )
     parser.add_argument("--batch-size", type=int, default=100, help="Mini-batch size")
     parser.add_argument(
@@ -27,7 +27,7 @@ def build_parser() -> argparse.ArgumentParser:
         default="cpu",
         help="Device to use: cuda or cpu (defaults to cpu when available)",
     )
-    parser.add_argument("--seed", type=int, default=1, help="Random seed for reproducibility")
+    parser.add_argument("--seed", type=int, default=2025, help="Random seed for reproducibility")
 
     # model + latent space
     parser.add_argument("--latent-dim", type=int, default=100, help="Number of latent bits (z-dim)")
@@ -35,7 +35,7 @@ def build_parser() -> argparse.ArgumentParser:
     parser.add_argument("--dec-arch", type=str, default="500,500", help="Comma-separated decoder layer sizes")
     parser.add_argument("--vimco-samples", type=int, default=5, help="Number of samples when using VIMCO")
     parser.add_argument("--noise", type=float, default=0.0, help="Channel noise level during training")
-    parser.add_argument("--test-noise", type=float, default=0.0, help="Channel noise level during evaluation")
+    parser.add_argument("--test-noise", type=float, default=0.0, help="Channel noise level during evaluation") 
 
     # optimization options
     parser.add_argument("--epochs", type=int, default=200, help="Number of training epochs")
@@ -45,7 +45,7 @@ def build_parser() -> argparse.ArgumentParser:
         type=str.lower,
         default="adam",
         choices=["adam", "sgd", "momentum"],
-        help="Optimizer to use",
+        help="Optimizer",
     )
     parser.add_argument(
         "--loss-type",
@@ -63,6 +63,8 @@ def build_parser() -> argparse.ArgumentParser:
         "--save-path", type=str, default="models/necst.pt", help="Where to save the trained model"
     )
     parser.add_argument("--checkpoint", type=str, default=None, help="Checkpoint path for evaluation or fine-tuning")
+    
+    # training loss plot
     parser.add_argument(
         "--plot-loss",
         action="store_true",

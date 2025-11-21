@@ -1,4 +1,4 @@
-"""training script for NECST Torch models (using Gumbel or VIMCO optimization)."""
+"""training script for NECST Torch models (using Gumbel & VIMCO optimization)."""
 
 import random
 import sys
@@ -25,7 +25,7 @@ def set_seed(seed: int) -> None:
     if torch.cuda.is_available():
         torch.cuda.manual_seed_all(seed)
 
-
+### use gumbel-softmax optimization
 def train_epoch_gumbel(model, loader, loss_fn, optimizer, device):
     model.train()
     running = 0.0
@@ -37,7 +37,6 @@ def train_epoch_gumbel(model, loader, loss_fn, optimizer, device):
         recon_logits = model.decoder(z)
         recon_probs = torch.sigmoid(recon_logits)
         qy = torch.softmax(logits / loss_fn.temperature, dim=-1)
-
         loss = loss_fn(model, recon_probs, batch_flat, qy)
         optimizer.zero_grad()
         loss.backward()
@@ -46,6 +45,7 @@ def train_epoch_gumbel(model, loader, loss_fn, optimizer, device):
     return running / max(len(loader), 1)
 
 
+### use vimco loss optimization
 def train_epoch_vimco(model, loader, loss_fn, theta_opt, phi_opt, device):
     model.train()
     running = 0.0
@@ -53,10 +53,8 @@ def train_epoch_vimco(model, loader, loss_fn, theta_opt, phi_opt, device):
         batch = batch.to(device)
         y, q, x_recon_logits = model(batch)
         log_q_h = q.log_prob(y).sum(dim=-1)
-
         flat = batch.view(batch.size(0), -1)
         theta_loss, phi_loss, _ = loss_fn(model, flat, x_recon_logits, log_q_h)
-
         theta_opt.zero_grad()
         phi_opt.zero_grad()
         theta_loss.backward(retain_graph=True)
@@ -66,22 +64,34 @@ def train_epoch_vimco(model, loader, loss_fn, theta_opt, phi_opt, device):
         running += theta_loss.item()
     return running / max(len(loader), 1)
 
+### compute validation loss using the same objective as training
+def evaluate_objective(model, loader, loss_fn, use_gumbel, device):
+    model.eval()
+    running = 0.0
+    count = 0
+    with torch.no_grad():
+        for batch in loader:
+            batch = batch if not isinstance(batch, (list, tuple)) else batch[0]
+            batch = batch.to(device)
+            if use_gumbel:
+                logits = model.encoder(batch)
+                z = loss_fn.gumbel_softmax(logits)
+                recon_logits = model.decoder(z)
+                recon_probs = torch.sigmoid(recon_logits)
+                batch_flat = batch.view(batch.size(0), -1)
+                qy = torch.softmax(logits / loss_fn.temperature, dim=-1)
+                loss = loss_fn(model, recon_probs, batch_flat, qy)
+                running += loss.item()
+            else:
+                y, q, x_recon_logits = model(batch)
+                log_q_h = q.log_prob(y).sum(dim=-1)
+                flat = batch.view(batch.size(0), -1)
+                theta_loss, _, _ = loss_fn(model, flat, x_recon_logits, log_q_h)
+                running += theta_loss.item()
+            count += 1
+    return running / max(count, 1)
 
-def evaluate_reconstruction(model, loader, device):
-    # Delegate to the model helper; per_element=False -> per-image BCE.
-    return model.evaluate_reconstruction(loader, per_element=False)
-
-
-def save_checkpoint(model, args):
-    if not args.save_path:
-        return
-    save_path = Path(args.save_path)
-    save_path.parent.mkdir(parents=True, exist_ok=True)
-    payload = {"model_state": model.state_dict(), "config": vars(args)}
-    torch.save(payload, save_path)
-    print(f"Saved checkpoint to {save_path}")
-
-
+# plot train + validation loss
 def plot_losses(train_losses, val_losses, save_dir=Path("plots"), filename="training_loss.png"):
     import matplotlib.pyplot as plt
 
@@ -102,15 +112,29 @@ def plot_losses(train_losses, val_losses, save_dir=Path("plots"), filename="trai
     plt.close()
 
 
+# save model here
+def save_checkpoint(model, args):
+    if not args.save_path:
+        return
+    save_path = Path(args.save_path)
+    save_path.parent.mkdir(parents=True, exist_ok=True)
+    payload = {"model_state": model.state_dict(), "config": vars(args)}
+    torch.save(payload, save_path)
+    print(f"Saved checkpoint to {save_path}")
+
+
 if __name__ == "__main__":
     args = parse_args()
+    
+
+    # create model architecture
     set_seed(args.seed)
     if args.device.lower() == "cuda" and torch.cuda.is_available():
         device = torch.device("cuda")
     else:
         device = torch.device("cpu")
 
-    train_loader, valid_loader, test_loader, input_dim = build_dataloaders(
+    train_loader, valid_loader, _, input_dim = build_dataloaders(
         args.dataset, args.datadir, args.batch_size
     )
 
@@ -135,6 +159,7 @@ if __name__ == "__main__":
         hard=args.gumbel_hard,
     )
 
+    # optimizer
     opt_name = args.optimizer.lower()
     if use_gumbel:
         if opt_name == "adam":
@@ -161,6 +186,7 @@ if __name__ == "__main__":
         else:
             raise ValueError(f"Unsupported optimizer '{args.optimizer}'")
 
+    # train over epoch + batches
     train_curve = []
     val_curve = []
 
@@ -171,19 +197,18 @@ if __name__ == "__main__":
             train_loss = train_epoch_vimco(model, train_loader, loss_fn, theta_opt, phi_opt, device)
 
         train_curve.append(train_loss)
+
+        # validation
         if valid_loader is not None:
-            val_loss = evaluate_reconstruction(model, valid_loader, device)
+            val_loss = evaluate_objective(model, valid_loader, loss_fn, use_gumbel, device)
             val_curve.append(val_loss)
 
+        # print every 10 epoch
         if epoch % 10 == 0:
             msg = f"Epoch {epoch}/{args.epochs} - train loss: {train_loss:.4f}"
             if valid_loader is not None:
-                msg += f" | val BCE per image: {val_curve[-1]:.4f}"
+                msg += f" | val loss: {val_curve[-1]:.4f}"
             print(msg)
-
-    if test_loader is not None:
-        test_loss = evaluate_reconstruction(model, test_loader, device)
-        print(f"Test BCE per image: {test_loss:.4f}")
 
     save_checkpoint(model, args)
 

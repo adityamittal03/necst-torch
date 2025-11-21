@@ -6,7 +6,7 @@ from torchvision import datasets, transforms
 
 class RandomBitsDataset(Dataset):
     """
-    Loads binary vectors stored as .npy files (train/valid/test splits).
+    random bits
     """
 
     def __init__(self, npy_path, transform=None):
@@ -25,8 +25,7 @@ class RandomBitsDataset(Dataset):
 
 class BinarizedMNISTDataset(Dataset):
     """
-    Wraps torchvision MNIST and deterministically binarizes pixels.
-    Optionally returns labels.
+    mnist
     """
 
     def __init__(self, root, train=True, download=True, return_labels=False, transform=None):
@@ -52,8 +51,7 @@ class BinarizedMNISTDataset(Dataset):
 
 class BinarizedOmniglotDataset(Dataset):
     """
-    Wraps torchvision Omniglot and deterministically binarizes pixels.
-    Optionally returns labels (alphabet/character indices).
+    omniglot
     """
 
     def __init__(self, root, background=True, download=True, return_labels=False, transform=None):
@@ -79,7 +77,7 @@ class BinarizedOmniglotDataset(Dataset):
 
 def load_binarized_mnist(root, val_split=10_000, download=True, return_labels=False, seed=1234):
     """
-    Create deterministic train/val/test splits from torchvision MNIST and binarize pixels.
+    load mnist
     """
     train_full = BinarizedMNISTDataset(
         root=root, train=True, download=download, return_labels=return_labels
@@ -97,8 +95,7 @@ def load_binarized_mnist(root, val_split=10_000, download=True, return_labels=Fa
 
 def load_binarized_omniglot(root, val_split=2_000, download=True, return_labels=False, seed=1234):
     """
-    Create deterministic train/val/test splits from torchvision Omniglot and binarize pixels.
-    Uses background split for train/val and evaluation split as test.
+    load omniglot
     """
     train_full = BinarizedOmniglotDataset(
         root=root, background=True, download=download, return_labels=return_labels

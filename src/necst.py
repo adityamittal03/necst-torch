@@ -95,9 +95,9 @@ class NecstTorch(nn.Module):
         return y, q, x_recon_logits
 
     # forward() on test
-    def forward_test(self, x):
+    def sample_reconstruction(self, x):
         """
-        same for test data.
+        same for test data. No vimco samples.
         """
         # encode
         logits = self.encoder(x)
@@ -118,40 +118,7 @@ class NecstTorch(nn.Module):
 
         return y, q, x_reconstr_logits
 
-    ### test error
-    def evaluate_reconstruction(self, loader, per_element: bool = True):
-        """
-        average BCE reconstruction loss over dataset.
-        per_element=True -> per-pixel BCE; False -> per-image BCE.
-        """
-
-        if loader is None:
-            raise ValueError("Loader is required for evaluation.")
-
-        self.eval()
-        device = next(self.parameters()).device
-        
-        total_loss = 0.0
-        total_elems = 0
-        total_samples = 0
-        with torch.no_grad():
-            for batch in loader:
-                x = batch if not isinstance(batch, (list, tuple)) else batch[0]
-                x = x.to(device)
-                x_flat = x.view(x.size(0), -1)
-                _, _, recon_logits = self.forward_test(x)
-                total_loss += F.binary_cross_entropy_with_logits(
-                    recon_logits, x_flat, reduction="sum"
-                ).item()
-                total_elems += x_flat.numel()
-                total_samples += x_flat.size(0)
-
-        if per_element:
-            return total_loss / max(total_elems, 1)
-
-        return total_loss / max(total_samples, 1)
-
-
+    # plot image + reconstruction
     def plot_reconstructions(self, loader, n_samples: int = 8, title: str = None, seed: int = None):
         """
         plots reconstructions
@@ -180,7 +147,7 @@ class NecstTorch(nn.Module):
         batch = batch.to(device)
 
         with torch.no_grad():
-            _, _, recon_logits = self.forward_test(batch)
+            _, _, recon_logits = self.sample_reconstruction(batch)
             recon = torch.sigmoid(recon_logits)
 
         orig = batch.view(batch.size(0), side, side).cpu()
@@ -198,3 +165,36 @@ class NecstTorch(nn.Module):
             fig.suptitle(title)
         plt.tight_layout()
         return fig
+
+    ### test error
+    def get_loss(self, loader, per_element: bool = True):
+        """
+        average BCE loss over dataset.
+        args: per_element=True -> per-pixel BCE; False -> per-image BCE.
+        """
+
+        if loader is None:
+            raise ValueError("Loader is required for evaluation.")
+
+        self.eval()
+        device = next(self.parameters()).device
+        
+        total_loss = 0.0
+        total_elems = 0
+        total_samples = 0
+        with torch.no_grad():
+            for batch in loader:
+                x = batch if not isinstance(batch, (list, tuple)) else batch[0]
+                x = x.to(device)
+                x_flat = x.view(x.size(0), -1)
+                _, _, recon_logits = self.sample_reconstruction(x)
+                total_loss += F.binary_cross_entropy_with_logits(
+                    recon_logits, x_flat, reduction="sum"
+                ).item()
+                total_elems += x_flat.numel()
+                total_samples += x_flat.size(0)
+
+        if per_element:
+            return total_loss / max(total_elems, 1)
+
+        return total_loss / max(total_samples, 1)

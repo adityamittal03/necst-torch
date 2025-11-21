@@ -22,7 +22,6 @@ class Loss:
                 return param.device
         return torch.device("cpu")
 
-    # 1. vimco loss
     # l_2 regularization for encoder/decoder parameters 
     def regularization_loss(self, params):
         params = list(params)
@@ -34,6 +33,7 @@ class Loss:
             reg = reg + param.pow(2).sum()
         return self.reg_param * reg
 
+    # 1. vimco loss
     def build_vimco_loss(self, l):
         """
         building the Importance Weighted Autoencoder https://arxiv.org/abs/1509.00519
@@ -74,7 +74,7 @@ class Loss:
         full_loss = full_loss.mean()
         return theta_loss, phi_loss, full_loss
 
-    #### 2. gumbel-softmax helpers
+    # 2. gumbel-softmax
     def sample_gumbel(self, shape, eps=1e-20, device=None):
         if device is None:
             device = torch.device("cuda" if torch.cuda.is_available() else "cpu")

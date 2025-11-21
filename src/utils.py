@@ -1,17 +1,13 @@
-"""Shared utilities for NECST Torch scripts."""
+"""utilities"""
 
 from pathlib import Path
 from typing import Tuple
-
 from torch.utils.data import DataLoader
-
 from data_setup.dataloader import RandomBitsDataset, load_binarized_mnist, load_binarized_omniglot
 
 
 def _load_binary_mnist(root: Path, return_labels: bool = False):
-    # Uses torchvision MNIST with deterministic 0/1 binarization.
     return load_binarized_mnist(root, download=True, return_labels=return_labels)
-
 
 def _load_random_bits(root: Path):
     train = RandomBitsDataset(str(root / "random_bits_train.npy"))
@@ -19,11 +15,9 @@ def _load_random_bits(root: Path):
     test = RandomBitsDataset(str(root / "random_bits_test.npy"))
     return train, valid, test
 
-
 def _infer_input_dim(example) -> int:
     sample = example[0] if isinstance(example, (tuple, list)) else example
     return sample.numel()
-
 
 def get_dataset_splits(dataset_name: str, datadir: str, return_labels: bool = False) -> Tuple[tuple, int]:
     dataset = dataset_name.lower()
@@ -40,7 +34,6 @@ def get_dataset_splits(dataset_name: str, datadir: str, return_labels: bool = Fa
         raise ValueError(f"Unsupported dataset '{dataset_name}'")
     input_dim = _infer_input_dim(splits[0][0])
     return splits, input_dim
-
 
 def build_dataloaders(
     dataset_name: str,
