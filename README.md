@@ -29,12 +29,17 @@ python data_setup/download.py random_bits --n-bits 100
 ```bash
 python src/train.py \
   --dataset binarymnist \
+  --datadir data \
   --device cuda \
+  --batch-size 100 \
   --epochs 200 \
   --loss-type vimco \
-  --save-path models/necst.pt \
-  --plot-reconstruction \
-  --plot-markov
+  --latent-dim 100 \
+  --vimco-samples 5 \
+  --lr 1e-3 \
+  --noise 0.1 \
+  --save-path models/mnist_vimco_0.1.pt \
+  --plot-loss
 ```
 
 ### Outputs
