@@ -44,10 +44,4 @@ python src/train.py \
 
 ### Outputs
 
-- **Model weights**: saved to `models/necst.pt` (configurable via `--save-path`).
-- **Plots**: stored in `results/`  
-  - `training_loss.png` (enabled by default; disable via `--no-plot-loss`)  
-  - `reconstruction.png` (enable with `--plot-reconstruction`)  
-  - `markov_chain.png` (enable with `--plot-markov`)
-
-Validation/test BCE metrics are printed during training. Use `python src/test.py --checkpoint models/necst.pt` to evaluate a saved model on the test split.
+tbd
