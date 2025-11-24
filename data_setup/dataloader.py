@@ -56,7 +56,11 @@ class BinarizedOmniglotDataset(Dataset):
 
     def __init__(self, root, background=True, download=True, return_labels=False, transform=None):
         binarize = transforms.Lambda(lambda x: (x > 0.5).float())
-        base_transform = transforms.Compose([transforms.ToTensor(), binarize])
+        base_transform = transforms.Compose([
+            transforms.Resize((28, 28)),
+            transforms.ToTensor(), 
+            binarize
+        ])
         self.dataset = datasets.Omniglot(
             root=str(root),
             background=background,
