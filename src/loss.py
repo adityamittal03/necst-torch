@@ -79,44 +79,54 @@ class Loss:
         return theta_loss, phi_loss, full_loss
 
     # 2. gumbel-softmax
-    def sample_gumbel(self, shape, eps=1e-20, device=None):
-        if device is None:
-            device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
-        U = torch.rand(shape, device=device)
-        return -torch.log(-torch.log(U + eps) + eps)
-
-    def gumbel_softmax_sample(self, logits, temperature=None):
-        temperature = self.temperature if temperature is None else temperature
-        noise = self.sample_gumbel(logits.size(), device=logits.device)
-        return F.softmax((logits + noise) / temperature, dim=-1)
+    def gumbel_sigmoid_sample(self, logits, temperature):
+        """
+        Samples from a Relaxed Bernoulli distribution (Binary Gumbel).
+        Math: y = sigmoid((logits + log(u) - log(1-u)) / temp)
+        """
+        eps = 1e-20
+        # Sample uniform noise
+        u = torch.rand_like(logits)
+        # Convert to Logistic noise
+        logistic_noise = torch.log(u + eps) - torch.log(1 - u + eps)
+        # Apply temperature and sigmoid
+        y = torch.sigmoid((logits + logistic_noise) / temperature)
+        return y
+    
 
     def gumbel_softmax(self, logits, temperature=None, hard=None):
-        """
-        ST-gumbel-softmax
-        input: [..., n_class]
-        return: same shape as logits, optionally hard one-hot vectors (straight-through)
-        """
-        temperature = self.temperature if temperature is None else temperature
-        hard = self.hard if hard is None else hard
-        y = self.gumbel_softmax_sample(logits, temperature)
+            """
+            Modified to perform BINARY Gumbel-Sigmoid sampling.
+            """
+            temperature = self.temperature if temperature is None else temperature
+            hard = self.hard if hard is None else hard
+            
+            y = self.gumbel_sigmoid_sample(logits, temperature)
 
-        if not hard:
-            return y
+            if not hard:
+                return y
 
-        shape = y.size()
-        _, ind = y.max(dim=-1)
-        y_hard = torch.zeros_like(y).view(-1, shape[-1])
-        y_hard.scatter_(1, ind.view(-1, 1), 1)
-        y_hard = y_hard.view(*shape)
-        y_hard = (y_hard - y).detach() + y
-        return y_hard
+            y_hard = torch.round(y)
+            
+            y_hard = (y_hard - y).detach() + y
+            return y_hard
+    
 
-    def gumbel_loss(self, recon_x, x, qy):
-        BCE = F.binary_cross_entropy(recon_x, x, reduction="sum") / x.shape[0]
-        categorical_dim = qy.size(-1)
-        log_ratio = torch.log(qy * categorical_dim + 1e-20)
-        KLD = torch.sum(qy * log_ratio, dim=-1).mean()
-        return BCE + KLD
+    def gumbel_loss(self, recon_logits, x, qy_soft):
+            """
+            recon_logits: Decoder output (unnormalized)
+            x: Target image
+            qy_soft: Probability of bit=1 (from encoder, BEFORE noise/sampling)
+            """
+            BCE = F.binary_cross_entropy_with_logits(recon_logits, x, reduction="sum") / x.shape[0]
+            p = torch.clamp(qy_soft, 1e-6, 1 - 1e-6) 
+            prior = 0.5
+            
+            KLD_element = p * torch.log(p / prior) + (1 - p) * torch.log((1 - p) / (1 - prior))
+            KLD = torch.sum(KLD_element, dim=-1).mean()
+
+            return BCE + KLD
+
 
     def _gumbel_softmax_loss(self, model, recon_x, x, qy):
         params = list(model.parameters())
