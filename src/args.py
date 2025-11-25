@@ -55,10 +55,8 @@ def build_parser() -> argparse.ArgumentParser:
         help="Which loss/estimator to train with",
     )
     parser.add_argument("--reg-param", type=float, default=1e-3, help="L2 regularization strength")
-    parser.add_argument("--temperature", type=float, default=0.67, help="Gumbel-Softmax initial temperature")
+    parser.add_argument("--temperature", type=float, default=0.67, help="Gumbel-Softmax temperature")
     parser.add_argument("--gumbel-hard", action="store_true", help="Use hard straight-through Gumbel samples")
-    parser.add_argument("--temp-anneal", action="store_true", help="Enable linear temperature annealing for Gumbel-Softmax")
-    parser.add_argument("--temp-final", type=float, default=0.1, help="Final temperature for annealing (default: 0.1)")
 
     # checkpointing
     parser.add_argument(

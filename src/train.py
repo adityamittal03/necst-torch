@@ -2,6 +2,8 @@
 
 import random
 import sys
+import csv  
+import time
 from pathlib import Path
 
 # Allow running `python src/train.py` by injecting the repo root onto sys.path.
@@ -25,41 +27,73 @@ def set_seed(seed: int) -> None:
     if torch.cuda.is_available():
         torch.cuda.manual_seed_all(seed)
 
-def linear_anneal_temperature(initial_temp, final_temp, current_epoch, total_epochs):
-    """Linearly anneal temperature from initial to final over total_epochs.
-    
-    Args:
-        initial_temp: Starting temperature
-        final_temp: Final temperature
-        current_epoch: Current epoch (0-indexed)
-        total_epochs: Total number of training epochs
-    
-    Returns:
-        Annealed temperature
-    """
-    if current_epoch >= total_epochs - 1:
-        return final_temp
-    progress = current_epoch / (total_epochs - 1)
-    return initial_temp + (final_temp - initial_temp) * progress
-
 ### use gumbel-softmax optimization
 def train_epoch_gumbel(model, loader, loss_fn, optimizer, device):
     model.train()
-    running = 0.0
+    
+    stats = {
+        "loss": 0.0,           # Total Loss
+        "bce_soft": 0.0,       # Soft Reconstruction Error
+        "bce_hard": 0.0,       # Hard (Binary) Reconstruction Error
+        "kld": 0.0,            # Regularization term
+        "grad_norm": 0.0,      # Stability metric
+        "active_bits": 0.0,    # How many bits are carrying info
+        "saturation": 0.0,     # How confident is the encoder
+    }
+    
+    steps = 0
+    
     for batch in loader:
         batch = batch.to(device)
         batch_flat = batch.view(batch.size(0), -1)
-        logits = model.encoder(batch)
-        z = loss_fn.gumbel_softmax(logits)
-        recon_logits = model.decoder(z)
         
+        logits = model.encoder(batch)
+        
+        z_soft = loss_fn.gumbel_softmax(logits, hard=False) 
+        
+        z_hard = (torch.sigmoid(logits) > 0.5).float()
+        recon_logits_soft = model.decoder(z_soft)
+        recon_logits_hard = model.decoder(z_hard)
         qy_probs = torch.sigmoid(logits)
-        loss = loss_fn(model, recon_logits, batch_flat, qy_probs)
+        loss = loss_fn(model, recon_logits_soft, batch_flat, qy_probs)
+        
+        with torch.no_grad():
+            bce_soft = torch.nn.functional.binary_cross_entropy_with_logits(
+                recon_logits_soft, batch_flat, reduction='mean'
+            )
+            bce_hard = torch.nn.functional.binary_cross_entropy_with_logits(
+                recon_logits_hard, batch_flat, reduction='mean'
+            )
+            kl_term = loss.item() - bce_soft.item() # Rough estimate based on total - bce
+            
+            p = qy_probs
+            active_mask = (p > 0.1) & (p < 0.9)
+            active_count = active_mask.sum(dim=1).float().mean()
+            
+            saturated_mask = (p < 0.05) | (p > 0.95)
+            saturation_pct = saturated_mask.float().mean()
+
         optimizer.zero_grad()
         loss.backward()
+        
+        total_norm = 0.0
+        for p in model.parameters():
+            if p.grad is not None:
+                param_norm = p.grad.data.norm(2)
+                total_norm += param_norm.item() ** 2
+        total_norm = total_norm ** 0.5
+
         optimizer.step()
-        running += loss.item()
-    return running / max(len(loader), 1)
+
+        stats["loss"] += loss.item()
+        stats["bce_soft"] += bce_soft.item()
+        stats["bce_hard"] += bce_hard.item()
+        stats["kld"] += kl_term
+        stats["grad_norm"] += total_norm
+        stats["active_bits"] += active_count.item()
+        stats["saturation"] += saturation_pct.item()
+        steps += 1
+    return {k: v / max(steps, 1) for k, v in stats.items()}
 
 
 ### use vimco loss optimization
@@ -142,7 +176,6 @@ def save_checkpoint(model, args):
 if __name__ == "__main__":
     args = parse_args()
     
-
     # create model architecture
     set_seed(args.seed)
     if args.device.lower() == "cuda" and torch.cuda.is_available():
@@ -174,6 +207,23 @@ if __name__ == "__main__":
         temperature=args.temperature,
         hard=args.gumbel_hard,
     )
+
+    # Setup CSV Logging for Gumbel
+    log_file = None
+    if use_gumbel:
+        timestamp = int(time.time())
+        # Naming convention: gumbel_{dataset}_z{latent}_lr{lr}_{timestamp}.csv
+        log_name = f"gumbel_{args.dataset}_z{args.latent_dim}_lr{args.lr}_{timestamp}.csv"
+        log_path = Path("logs") / log_name
+        log_path.parent.mkdir(parents=True, exist_ok=True)
+        
+        with open(log_path, 'w', newline='') as f:
+            writer = csv.writer(f)
+            writer.writerow([
+                "epoch", "loss", "val_loss", "bce_soft", "bce_hard", 
+                "kld", "grad_norm", "active_bits", "saturation", "temperature"
+            ])
+        print(f"Logging stats to {log_path}")
 
     # optimizer
     opt_name = args.optimizer.lower()
@@ -207,23 +257,16 @@ if __name__ == "__main__":
     val_curve = []
 
     for epoch in trange(1, args.epochs + 1, desc="Epochs"):
-        if use_gumbel and args.temp_anneal:
-            current_temp = linear_anneal_temperature(
-                initial_temp=args.temperature,
-                final_temp=args.temp_final,
-                current_epoch=epoch - 1,
-                total_epochs=args.epochs
-            )
-            loss_fn.set_temperature(current_temp)
-        
         if use_gumbel:
-            train_loss = train_epoch_gumbel(model, train_loader, loss_fn, optimizer, device)
+            epoch_stats = train_epoch_gumbel(model, train_loader, loss_fn, optimizer, device)
+            train_loss = epoch_stats["loss"]
         else:
             train_loss = train_epoch_vimco(model, train_loader, loss_fn, theta_opt, phi_opt, device)
 
         train_curve.append(train_loss)
 
         # validation
+        val_loss = 0.0
         if valid_loader is not None:
             val_loss = evaluate_objective(model, valid_loader, loss_fn, use_gumbel, device)
             val_curve.append(val_loss)
@@ -233,13 +276,28 @@ if __name__ == "__main__":
             msg = f"Epoch {epoch}/{args.epochs} - train loss: {train_loss:.4f}"
             if valid_loader is not None:
                 msg += f" | val loss: {val_curve[-1]:.4f}"
-            if use_gumbel and args.temp_anneal:
-                msg += f" | temp: {loss_fn.temperature:.4f}"
+            if use_gumbel:
+                 msg += f" | Hard BCE: {epoch_stats['bce_hard']:.2f} | Active: {epoch_stats['active_bits']:.1f}"
             print(msg)
+
+        # Log to CSV
+        if use_gumbel:
+            with open(log_path, 'a', newline='') as f:
+                writer = csv.writer(f)
+                writer.writerow([
+                    epoch, 
+                    epoch_stats["loss"], 
+                    val_loss if valid_loader else "",
+                    epoch_stats["bce_soft"],
+                    epoch_stats["bce_hard"],
+                    epoch_stats["kld"],
+                    epoch_stats["grad_norm"],
+                    epoch_stats["active_bits"],
+                    epoch_stats["saturation"],
+                    loss_fn.temperature
+                ])
 
     save_checkpoint(model, args)
 
     if args.plot_loss:
         plot_losses(train_curve, val_curve, save_dir=Path("plots"))
-
-
