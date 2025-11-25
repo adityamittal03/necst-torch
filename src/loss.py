@@ -102,7 +102,6 @@ class Loss:
             hard = self.hard if hard is None else hard
             
             y = self.gumbel_sigmoid_sample(logits, temperature)
-
             if not hard:
                 return y
 
