@@ -16,6 +16,10 @@ class Loss:
         self.temperature = temperature
         self.hard = hard
 
+    def set_temperature(self, temp):
+        """Update temperature dynamically during training (for annealing)."""
+        self.temperature = temp
+
     def _get_device(self, params):
         for param in params:
             if param.device is not None:

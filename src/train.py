@@ -25,6 +25,23 @@ def set_seed(seed: int) -> None:
     if torch.cuda.is_available():
         torch.cuda.manual_seed_all(seed)
 
+def linear_anneal_temperature(initial_temp, final_temp, current_epoch, total_epochs):
+    """Linearly anneal temperature from initial to final over total_epochs.
+    
+    Args:
+        initial_temp: Starting temperature
+        final_temp: Final temperature
+        current_epoch: Current epoch (0-indexed)
+        total_epochs: Total number of training epochs
+    
+    Returns:
+        Annealed temperature
+    """
+    if current_epoch >= total_epochs - 1:
+        return final_temp
+    progress = current_epoch / (total_epochs - 1)
+    return initial_temp + (final_temp - initial_temp) * progress
+
 ### use gumbel-softmax optimization
 def train_epoch_gumbel(model, loader, loss_fn, optimizer, device):
     model.train()
@@ -191,6 +208,15 @@ if __name__ == "__main__":
     val_curve = []
 
     for epoch in trange(1, args.epochs + 1, desc="Epochs"):
+        if use_gumbel and args.temp_anneal:
+            current_temp = linear_anneal_temperature(
+                initial_temp=args.temperature,
+                final_temp=args.temp_final,
+                current_epoch=epoch - 1,
+                total_epochs=args.epochs
+            )
+            loss_fn.set_temperature(current_temp)
+        
         if use_gumbel:
             train_loss = train_epoch_gumbel(model, train_loader, loss_fn, optimizer, device)
         else:
@@ -208,9 +234,13 @@ if __name__ == "__main__":
             msg = f"Epoch {epoch}/{args.epochs} - train loss: {train_loss:.4f}"
             if valid_loader is not None:
                 msg += f" | val loss: {val_curve[-1]:.4f}"
+            if use_gumbel and args.temp_anneal:
+                msg += f" | temp: {loss_fn.temperature:.4f}"
             print(msg)
 
     save_checkpoint(model, args)
 
     if args.plot_loss:
         plot_losses(train_curve, val_curve, save_dir=Path("plots"))
+
+
