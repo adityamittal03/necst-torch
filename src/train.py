@@ -180,6 +180,8 @@ if __name__ == "__main__":
     set_seed(args.seed)
     if args.device.lower() == "cuda" and torch.cuda.is_available():
         device = torch.device("cuda")
+    elif args.device is not None:
+        device = torch.device(args.device)
     else:
         device = torch.device("cpu")
 
