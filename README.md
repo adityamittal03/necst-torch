@@ -33,17 +33,17 @@ Example training run using VIMCO loss on MNIST data:
 
 ```bash
 python src/train.py \
-  --dataset omniglot \
+  --dataset binarymnist \
   --datadir data \
   --device cuda \
   --batch-size 100 \
-  --epochs 500 \
+  --epochs 200 \
   --loss-type vimco \
   --latent-dim 100 \
   --vimco-samples 5 \
   --lr 1e-3 \
   --noise 0.1 \
-  --save-path models/omniglot_vimco.pt \
+  --save-path models/mnist_vimco.pt \
   --plot-loss
 ```
 
